@@ -701,17 +701,14 @@ async def get_frontend_config():
 
         # Get vector database configuration
         db_config = config.get_database_config()
+        collections = config.get_collections_config()
         vector_db_info = {
             "type": (
                 db_config.get("type", "weaviate-local")
                 if db_config
                 else "weaviate-local"
             ),
-            "collection_name": (
-                db_config.get("collection_name", "RagMeDocs")
-                if db_config
-                else "RagMeDocs"
-            ),
+            "collections": collections,
         }
 
         # Build safe configuration for frontend

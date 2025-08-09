@@ -161,6 +161,77 @@ class ConfigManager:
 
         return None
 
+    def get_collections_config(
+        self, db_name: str | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Get collections configuration for a vector database.
+
+        Args:
+            db_name: Name of the database configuration. If None, uses default database.
+
+        Returns:
+            List of collection configurations or empty list if not found
+        """
+        db_config = self.get_database_config(db_name)
+        if db_config is None:
+            return []
+
+        collections = db_config.get("collections", [])
+
+        # Handle legacy collection_name format
+        if not collections and "collection_name" in db_config:
+            # Convert legacy format to new format
+            collections = [{"name": db_config["collection_name"], "type": "text"}]
+
+        return collections if isinstance(collections, list) else []
+
+    def get_text_collection_name(self, db_name: str | None = None) -> str:
+        """
+        Get the name of the text collection from configuration.
+
+        Args:
+            db_name: Name of the database configuration. If None, uses default database.
+
+        Returns:
+            Name of the text collection, defaults to "RagMeDocs"
+        """
+        # Environment override (new) and backward compatibility (legacy)
+        env_override = os.getenv("VECTOR_DB_TEXT_COLLECTION_NAME")
+        if env_override:
+            return env_override
+
+        collections = self.get_collections_config(db_name)
+        for collection in collections:
+            if isinstance(collection, dict) and collection.get("type") == "text":
+                return collection.get("name", "RagMeDocs")
+
+        # Fallback to default
+        return "RagMeDocs"
+
+    def get_image_collection_name(self, db_name: str | None = None) -> str:
+        """
+        Get the name of the image collection from configuration.
+
+        Args:
+            db_name: Name of the database configuration. If None, uses default database.
+
+        Returns:
+            Name of the image collection, defaults to "ImageDocs"
+        """
+        # Environment override for convenience
+        env_override = os.getenv("VECTOR_DB_IMAGE_COLLECTION_NAME")
+        if env_override:
+            return env_override
+        collections = self.get_collections_config(db_name)
+
+        for collection in collections:
+            if isinstance(collection, dict) and collection.get("type") == "images":
+                return collection.get("name", "ImageDocs")
+
+        # Fallback to default
+        return "ImageDocs"
+
     def get_agent_config(self, agent_name: str) -> dict[str, Any] | None:
         """
         Get agent configuration by name.

@@ -3,51 +3,6 @@
 ## **OPENED**
 
 ### bugs
-* test: integration --agents falling with
-
-```bash
-ap_urls PASSED [100%]
-
-=================================== FAILURES ===================================
-_______________________________ test_ragme_init ________________________________
-
-    def test_ragme_init():
-        with (
-            patch("src.ragme.ragme.create_vector_database") as mock_create_db,
-            patch("llama_index.llms.openai.OpenAI") as mock_openai,
-            patch("weaviate.agents.query.QueryAgent") as mock_query_agent,
-            patch("llama_index.core.agent.workflow.FunctionAgent") as mock_function_agent,
-            patch.dict(
-                "os.environ",
-                {"VECTOR_DB_TYPE": "weaviate", "VECTOR_DB_COLLECTION_NAME": "RagMeDocs"},
-            ),
-        ):
-            # Setup mocks
-            mock_db_instance = MagicMock()
-            mock_create_db.return_value = mock_db_instance
-            mock_query_agent.return_value = MagicMock()
-            mock_function_agent.return_value = MagicMock()
-            mock_openai.return_value = MagicMock()
-    
-            # Mock the vector database methods
-            mock_db_instance.setup = MagicMock()
-            mock_db_instance.create_query_agent = MagicMock(return_value=MagicMock())
-    
-            ragme = RagMe()
-            # Collection name should come from config, which could be "Viewfinder", "RagMeDocs",
-            # or "test_integration" if integration tests have been run
->           assert ragme.collection_name in ["RagMeDocs", "Viewfinder", "test_integration"]
-E           AssertionError: assert '${VECTOR_DB_COLLECTION_NAME}' in ['RagMeDocs', 'Viewfinder', 'test_integration']
-E            +  where '${VECTOR_DB_COLLECTION_NAME}' = <src.ragme.ragme.RagMe object at 0x7f0ee8002920>.collection_name
-
-tests/test_ragme.py:63: AssertionError
-=========================== short test summary info ============================
-FAILED tests/test_ragme.py::test_ragme_init - AssertionError: assert '${VECTOR_DB_COLLECTION_NAME}' in ['RagMeDocs', 'Viewfinder', 'test_integration']
- +  where '${VECTOR_DB_COLLECTION_NAME}' = <src.ragme.ragme.RagMe object at 0x7f0ee8002920>.collection_name
-============ 1 failed, 85 passed, 3 deselected, 2 warnings in 5.46s ============
-Error: Process completed with exit code 1.
-```
-
 * a query for "detailed report on RDI conference" w/o RDI conference document results in query agent finding documents when it should not:
 ```bash
 2025-08-07 15:48:02 - Dispatching to QueryAgent: 'RDI conference report'
@@ -78,6 +33,8 @@ specify which Maximilien you are referring to.
 * the chat text input is hidden on mobile (iPhone). Need to flip to horizontal and touch bottom to be able to make text input visible and usable
 
 ### tests
+* test: make `tests.sh integration --apis` and `tests.sh integration --agents` faster. One optimization is that `--agents` seems to repeat tests in `--apis`
+
 * test with local weaviate 
 * test with local milvus
 
@@ -111,7 +68,6 @@ In summary, RAGme-AI represents the application of RAG methodologies within AI s
 
 #### frontend
 * complete MCP authentication flow
-
 * settings to enable / disable saving uploaded documents in doc server
 * doc details card should allow viewing of doc and chunks
 
@@ -178,6 +134,9 @@ In summary, RAGme-AI represents the application of RAG methodologies within AI s
 ---
 
 ## **COMPLETED**
+* ✅ **COMPLETED** - additional collections support in config and UI [Config now supports `collections` array per database; backend `/config` returns collections; UI renders them]
+
+* ✅ **COMPLETED** - top bar shows multiple collections with icons [Header updated to display `Collections:` with icons for text and images; reads from backend `/config` collections]
 
 * ✅ **COMPLETED** - make sure the VDB and collection name is showing correctly on top bar using the config [Fixed top bar vector database display to show correct collection name by implementing configuration-based vector DB info instead of environment variables. Root causes identified and resolved: (1) Frontend was using stale environment variables from Node.js startup instead of live configuration, (2) Backend config endpoint didn't include vector database information. Solution: Added vector_database field to backend /config endpoint with type and collection_name from active configuration, updated frontend TypeScript to read vector DB info from config instead of process.env, and added proper TypeScript interface for vector_database field. Result: Top bar now correctly displays "Vector DB: weaviate | Collection: Viewfinder" when using Viewfinder.ai environment, automatically updating when environment is switched]
 
