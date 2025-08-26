@@ -1300,6 +1300,9 @@ async def get_frontend_config():
             "backend_config": config.get_storage_backend_config(),
         }
 
+        # Get AI acceleration configuration
+        ai_acceleration_config = config.get("ai_acceleration", {})
+
         # Build safe configuration for frontend
         frontend_config_data = {
             "application": {
@@ -1309,6 +1312,7 @@ async def get_frontend_config():
             },
             "vector_database": vector_db_info,
             "storage": storage_config,
+            "ai_acceleration": ai_acceleration_config,
             "frontend": frontend_config,
             "client": client_config,
             "features": features_config,
