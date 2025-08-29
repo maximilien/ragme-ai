@@ -3665,40 +3665,12 @@ Try asking me to add some URLs, documents, or images, or ask questions about you
                         <i class="fas fa-trash"></i>
                     </button>
                 `;
-            } else
-            
-            if (group.metadata?.is_chunked && group.metadata?.total_chunks) {
-                // New chunked document format
-                const totalChunks = group.metadata.total_chunks;
-                const originalFilename = group.metadata.original_filename || title;
-                
-                summary = group.text ? group.text.substring(0, 200) + '...' : 'No content available';
-                chunkInfo = `<span class="chunk-badge"><i class="fas fa-layer-group"></i> ${totalChunks} chunks</span>`;
-                
-                card.innerHTML = `
-                    <div class="document-content">
-                        <div class="document-title">
-                            <span class="document-title-text">${this.escapeHtml(originalFilename)}</span>
-                            ${chunkInfo}
-                            ${newBadge}
-                        </div>
-                        <div class="document-meta">
-                            <i class="fas fa-calendar"></i> ${date} | 
-                            <i class="fas fa-database"></i> ${group.metadata?.collection || 'Default'} |
-                            <i class="fas fa-file-alt"></i> Chunked document
-                        </div>
-                        <div class="document-summary">${this.escapeHtml(summary)}</div>
-                    </div>
-                    <button class="document-delete-btn" data-doc-index="${index}" title="Delete document">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                `;
-            } else if (group.isGroupedChunks && group.totalChunks > 1) {
-                // Existing chunked documents that were grouped
+            } else if (group.isGroupedChunks) {
+                // Chunked documents (both single and multiple chunks)
                 const originalFilename = group.originalFilename || title;
                 
                 summary = group.combinedText ? group.combinedText.substring(0, 200) + '...' : 'No content available';
-                chunkInfo = `<span class="chunk-badge"><i class="fas fa-layer-group"></i> ${group.totalChunks} chunks</span>`;
+                chunkInfo = group.totalChunks > 1 ? `<span class="chunk-badge"><i class="fas fa-layer-group"></i> ${group.totalChunks} chunks</span>` : '';
                 
                 card.innerHTML = `
                     <div class="document-content">
@@ -3710,7 +3682,7 @@ Try asking me to add some URLs, documents, or images, or ask questions about you
                         <div class="document-meta">
                             <i class="fas fa-calendar"></i> ${date} | 
                             <i class="fas fa-database"></i> ${group.metadata?.collection || 'Default'} |
-                            <i class="fas fa-file-alt"></i> Chunked document
+                            <i class="fas fa-file-alt"></i> ${group.totalChunks > 1 ? 'Chunked document' : 'Document'}
                         </div>
                         <div class="document-summary">${this.escapeHtml(summary)}</div>
                     </div>
@@ -5749,7 +5721,8 @@ Try asking me to add some URLs, documents, or images, or ask questions about you
         } else {
             // Fallback: find chunks in the original documents array
             chunksToDelete = this.documents.filter(doc => {
-                if (doc.metadata?.is_chunk && doc.metadata?.total_chunks) {
+                if ((doc.metadata?.is_chunk && doc.metadata?.total_chunks) || 
+                    (doc.metadata?.is_chunked && doc.metadata?.total_chunks)) {
                     // Extract base URL from chunk URL
                     const chunkBaseUrl = doc.url.split('#')[0];
                     const groupBaseUrl = groupedDoc.baseUrl;
@@ -5785,7 +5758,8 @@ Try asking me to add some URLs, documents, or images, or ask questions about you
                     // Also remove any remaining documents that might be related to this grouped document
                     // This handles cases where the grouping might not have captured all related documents
                     const remainingRelatedDocs = this.documents.filter(doc => {
-                        if (doc.metadata?.is_chunk && doc.metadata?.total_chunks) {
+                        if ((doc.metadata?.is_chunk && doc.metadata?.total_chunks) || 
+                            (doc.metadata?.is_chunked && doc.metadata?.total_chunks)) {
                             const chunkBaseUrl = doc.url.split('#')[0];
                             const groupBaseUrl = groupedDoc.baseUrl;
                             return chunkBaseUrl === groupBaseUrl;

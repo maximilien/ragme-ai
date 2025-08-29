@@ -206,29 +206,9 @@ async def add_json(json_input: JSONInput):
                 # Check if a document with the same URL already exists
                 existing_doc = get_ragme().vector_db.find_document_by_url(unique_url)
                 if existing_doc:
-                    # Only replace if it's not a chunked document or if the new one
-                    # is chunked. This prevents chunked documents from replacing
-                    # regular documents
-                    existing_is_chunked = existing_doc.get("metadata", {}).get(
-                        "is_chunked"
-                    ) or existing_doc.get("metadata", {}).get("is_chunk")
-                    new_is_chunked = doc_metadata.get("is_chunked") or doc_metadata.get(
-                        "is_chunk"
-                    )
-
-                    # If both are chunked documents with the same URL, replace
-                    # If existing is chunked but new is not, don't replace
-                    # If existing is not chunked but new is, replace
-                    if (existing_is_chunked and new_is_chunked) or (
-                        not existing_is_chunked and new_is_chunked
-                    ):
-                        # Delete the existing document
-                        get_ragme().vector_db.delete_document(existing_doc["id"])
-                        replaced_count += 1
-                    elif existing_is_chunked and not new_is_chunked:
-                        # Skip adding this document to avoid replacing chunked
-                        # document with regular document
-                        continue
+                    # Delete the existing document to replace it
+                    get_ragme().vector_db.delete_document(existing_doc["id"])
+                    replaced_count += 1
 
                 # Add the new document with unique URL
                 get_ragme().vector_db.write_documents(
@@ -1446,8 +1426,8 @@ async def update_query_settings(request: dict):
         # Extract query settings from request
         top_k = request.get("top_k", 5)
         text_rerank_top_k = request.get("text_rerank_top_k", 3)
-        text_relevance_threshold = request.get("text_relevance_threshold", 0.8)
-        image_relevance_threshold = request.get("image_relevance_threshold", 0.8)
+        text_relevance_threshold = request.get("text_relevance_threshold", 0.5)
+        image_relevance_threshold = request.get("image_relevance_threshold", 0.5)
 
         # Validate settings
         if not (1 <= top_k <= 20):
@@ -1474,8 +1454,22 @@ async def update_query_settings(request: dict):
                 "message": "Image relevance threshold must be between 0.1 and 1.0",
             }
 
-        # Note: In a real implementation, this would update the config.yaml file
-        # For now, we'll just validate the settings
+        # Update the config.yaml file with new settings
+        try:
+            from src.ragme.utils.config_manager import config
+
+            config.update_query_settings(
+                {
+                    "top_k": top_k,
+                    "text_rerank_top_k": text_rerank_top_k,
+                    "relevance_thresholds": {
+                        "text": text_relevance_threshold,
+                        "image": image_relevance_threshold,
+                    },
+                }
+            )
+        except Exception as config_error:
+            print(f"Could not update config file: {config_error}")
 
         return {
             "status": "success",
@@ -1483,8 +1477,10 @@ async def update_query_settings(request: dict):
             "settings": {
                 "top_k": top_k,
                 "text_rerank_top_k": text_rerank_top_k,
-                "text_relevance_threshold": text_relevance_threshold,
-                "image_relevance_threshold": image_relevance_threshold,
+                "relevance_thresholds": {
+                    "text": text_relevance_threshold,
+                    "image": image_relevance_threshold,
+                },
             },
         }
     except Exception as e:
