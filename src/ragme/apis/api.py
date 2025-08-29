@@ -317,32 +317,6 @@ def group_chunked_documents(documents: list[dict[str, Any]]) -> list[dict[str, A
     """
     groups = {}
 
-    # Debug: Count chunked documents by base URL
-    chunked_by_base = {}
-    for doc in documents:
-        if (
-            doc.get("metadata", {}).get("is_chunk")
-            and doc.get("metadata", {}).get("total_chunks")
-        ) or (
-            doc.get("metadata", {}).get("is_chunked")
-            and doc.get("metadata", {}).get("total_chunks")
-        ):
-            url = doc.get("url", "")
-            base_url = url.split("#")[0]
-            if base_url not in chunked_by_base:
-                chunked_by_base[base_url] = []
-            chunked_by_base[base_url].append(doc)
-
-    # Debug: Print chunk counts
-    for base_url, chunks in chunked_by_base.items():
-        print(
-            f"Backend grouping: {base_url} has {len(chunks)} chunks (expected: {chunks[0]['metadata']['total_chunks']})"
-        )
-        for chunk in chunks:
-            print(
-                f"  - chunk_index: {chunk['metadata'].get('chunk_index')}, id: {chunk['id']}"
-            )
-
     for doc in documents:
         # Check if this is a chunked document
         if (
@@ -461,37 +435,64 @@ def group_chunked_documents(documents: list[dict[str, Any]]) -> list[dict[str, A
     # Convert groups to list
     grouped_documents = list(groups.values())
 
-    # Debug: Print final grouped documents
-    print(f"Backend: Final grouped documents count: {len(grouped_documents)}")
-    for i, doc in enumerate(grouped_documents):
-        if doc.get("isGroupedChunks"):
-            print(
-                f"Backend: Grouped doc {i}: {doc.get('originalFilename')} has {len(doc.get('chunks', []))} chunks"
-            )
-            for chunk in doc.get("chunks", []):
-                print(
-                    f"  - chunk_id: {chunk.get('id')}, chunk_index: {chunk.get('chunk_index')}"
-                )
-
-    # Debug: Print what's actually being returned
-    print(f"Backend: Returning {len(grouped_documents)} grouped documents to frontend")
-    for i, doc in enumerate(grouped_documents):
-        if doc.get("isGroupedChunks"):
-            print(
-                f"Backend: Returning grouped doc {i}: {doc.get('originalFilename')} with {len(doc.get('chunks', []))} chunks"
-            )
-            print(
-                f"Backend: Chunks array type: {type(doc.get('chunks'))}, length: {len(doc.get('chunks', []))}"
-            )
-            if doc.get("chunks"):
-                print(
-                    f"Backend: First chunk: {doc['chunks'][0].get('id') if doc['chunks'] else 'None'}"
-                )
-                print(
-                    f"Backend: Last chunk: {doc['chunks'][-1].get('id') if doc['chunks'] else 'None'}"
-                )
-
     return grouped_documents
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Check the health of the RAG system and vector database connection.
+
+    Returns:
+        dict: Health status information
+    """
+    try:
+        # Test vector database connection
+        ragme = get_ragme()
+        try:
+            # Try to list documents to test connection
+            ragme.list_documents(limit=1, offset=0)
+            vdb_status = "healthy"
+            vdb_error = None
+        except Exception as e:
+            vdb_status = "error"
+            vdb_error = str(e)
+
+        # Test image collection if available
+        image_status = "not_configured"
+        image_error = None
+        try:
+            from ..utils.config_manager import config
+            from ..vdbs.vector_db_factory import create_vector_database
+
+            image_collection_name = config.get_image_collection_name()
+            if image_collection_name:
+                image_vdb = create_vector_database(
+                    collection_name=image_collection_name
+                )
+                image_vdb.list_images(limit=1, offset=0)
+                image_status = "healthy"
+        except Exception as e:
+            image_status = "error"
+            image_error = str(e)
+
+        # Overall status
+        overall_status = "healthy" if vdb_status == "healthy" else "error"
+
+        return {
+            "status": "success",
+            "overall_status": overall_status,
+            "vector_database": {"status": vdb_status, "error": vdb_error},
+            "image_collection": {"status": image_status, "error": image_error},
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "overall_status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
 @app.get("/count-documents")
@@ -612,22 +613,6 @@ async def list_content(
         # Get documents if requested
         if content_type in ["document", "documents", "both"]:
             documents = get_ragme().list_documents(limit=1000, offset=0)
-            print(f"Backend: Retrieved {len(documents)} documents from vector database")
-
-            # Log chunked documents for debugging
-            chunked_docs = [
-                doc
-                for doc in documents
-                if doc.get("metadata", {}).get("is_chunk")
-                or doc.get("metadata", {}).get("is_chunked")
-            ]
-            if chunked_docs:
-                print(f"Backend: Found {len(chunked_docs)} chunked documents:")
-                for doc in chunked_docs:
-                    print(
-                        f"  - ID: {doc.get('id')}, URL: {doc.get('url')}, chunk_index: {doc.get('metadata', {}).get('chunk_index')}, total_chunks: {doc.get('metadata', {}).get('total_chunks')}"
-                    )
-
             for doc in documents:
                 doc["content_type"] = "document"
             all_items.extend(documents)
@@ -895,22 +880,61 @@ async def summarize_document(input_data: SummarizeInput):
                     }
 
         print(f"Number of grouped items: {len(grouped_items)}")
+        print(f"Number of original items: {len(all_items)}")
+        print(f"Looking for document ID: {document_id} (type: {type(document_id)})")
 
         # Search for the document in grouped items
+        document = None
         for item in grouped_items:
             item_id = item.get("id")
             # Convert Weaviate UUID to string for comparison
             item_id_str = str(item_id) if item_id else None
+            print(
+                f"Checking grouped item ID: {item_id_str} (type: {type(item_id_str)})"
+            )
             if item_id_str == document_id:
                 document = item
                 print(
-                    f"Found item: {item.get('url', 'No URL')} (type: {item.get('content_type', 'unknown')})"
+                    f"Found item in grouped items: {item.get('url', 'No URL')} (type: {item.get('content_type', 'unknown')})"
                 )
                 break
 
+        # If not found in grouped items, try to find in original items
+        if not document:
+            print(
+                f"Document not found in grouped items with ID: {document_id}, trying original items..."
+            )
+            for item in all_items:
+                item_id = item.get("id")
+                item_id_str = str(item_id) if item_id else None
+                print(
+                    f"Checking original item ID: {item_id_str} (type: {type(item_id_str)})"
+                )
+                if item_id_str == document_id:
+                    document = item
+                    print(
+                        f"Found item in original items: {item.get('url', 'No URL')} (type: {item.get('content_type', 'unknown')})"
+                    )
+                    break
+
+        # If still not found, try to find by URL
+        if not document:
+            print(f"Document not found by ID: {document_id}, trying to find by URL...")
+            for item in all_items:
+                item_url = item.get("url", "")
+                if item_url == document_id:
+                    document = item
+                    print(
+                        f"Found item by URL: {item.get('url', 'No URL')} (type: {item.get('content_type', 'unknown')})"
+                    )
+                    break
+
         if not document:
             print(f"Document not found with ID: {document_id}")
-            raise HTTPException(status_code=404, detail="Document not found")
+            return {
+                "status": "error",
+                "summary": f"Document not found for summarization. ID: {document_id}. Please try refreshing the document list or use the Force Reload button.",
+            }
 
         # Check if summary already exists in metadata
         metadata = document.get("metadata", {})
@@ -1172,9 +1196,15 @@ async def summarize_document(input_data: SummarizeInput):
             "status": "success",
             "summary": summary_text,
             "document_id": input_data.document_id,
+            "cached": False,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        print(f"Error in summarize_document endpoint: {e}")
+        return {
+            "status": "error",
+            "summary": f"Error generating summary: {str(e)}. Please try again or use the Force Reload button.",
+            "document_id": input_data.document_id,
+        }
 
 
 @app.post("/upload-files")
@@ -2614,12 +2644,6 @@ async def download_file(document_id: str):
     try:
         # First try to get from text collection
         documents = get_ragme().list_documents(limit=1000, offset=0)
-        print(f"Looking for document with ID: {document_id}")
-        print(f"Number of documents: {len(documents)}")
-
-        # Debug: print all document IDs to see what's available
-        doc_ids = [doc.get("id") for doc in documents]
-        print(f"Available document IDs: {doc_ids}")
 
         document = next(
             (doc for doc in documents if str(doc.get("id")) == document_id), None
